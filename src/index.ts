@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import taskRoutes from "./routes/tasks.ts";
+import { router as taskRoutes } from "./routes/tasks.ts";
 
 const app = express();
 const port = 8080;
@@ -13,7 +13,7 @@ app.use("/tasks", taskRoutes);
 console.log("DATABASE_URL:", process.env.DATABASE_URL); // Add this line
 
 app.get("/", async (req, res) => {
-  res.status(200).send("Welcome to the server");
+  res.status(200).send("Bookydoo API v0.1");
 });
 
 app.listen(port, () => {

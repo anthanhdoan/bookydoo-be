@@ -1,5 +1,7 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import { IdNotANumberError } from "../errors/IdNotANumber.ts";
+import { safe } from "../utils/safe.ts";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -25,6 +27,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
   try {
+    if (!id || isNaN(Number(id))) throw new IdNotANumberError();
     const task = await prisma.task.findUniqueOrThrow({
       where: {
         id: Number(id),
@@ -42,25 +45,34 @@ router.get("/:id", async (req, res) => {
         .json({ error: "No task found with the provided ID" });
     }
 
+    if (err instanceof IdNotANumberError) {
+      return res.status(err.code).json(err.message);
+    }
+
     console.error(err);
     res.status(500).json({ error: "failed to fetch task" });
   }
 });
 
 // Create a new task ----------------------------------------------------------
-router.post("/", async (req, res) => {
+router.post("/", async (req: Request<{}, {}, { description: string }>, res) => {
+  const { description } = req.body;
+  const result = await safe(prisma.task.create({ data: { description } }));
+
+  if (result.error)
+    return res.status(400).json({ error: "failed to create task" });
+  return res.status(201).json(result.result);
+
+  /*
   try {
-    // takes the whole TaskBody, includes 'completed: boolean',
-    // which doesn't make sense for a post... Refactor later
-    const { description }: TaskBody = req.body;
-
+    const { description } = req.body;
     const task = await prisma.task.create({ data: { description } });
-
     res.status(201).json(task);
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: "failed to create task" });
+    res.status(400).json(err.message);
   }
+  */
 });
 
 // Update a task --------------------------------------------------------------
@@ -68,6 +80,8 @@ router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { description, completed }: TaskBody = req.body;
+
+    if (!id || isNaN(Number(id))) throw new IdNotANumberError();
 
     const task = await prisma.task.update({
       where: { id: Number(id) },
@@ -84,6 +98,12 @@ router.put("/:id", async (req, res) => {
         .status(404)
         .json({ error: "No task found with the provided ID" });
     }
+
+    if (err instanceof IdNotANumberError) {
+      console.log(err);
+      return res.status(err.code).json(err.message);
+    }
+
     console.error(err);
     res.status(500).json({ error: "failed to update task" });
   }
@@ -95,7 +115,7 @@ router.delete("/:id", async (req, res) => {
     const { id } = req.params;
 
     await prisma.task.delete({ where: { id: Number(id) } });
-    res.json({ message: "Task deleted" });
+    res.status(204).json({ message: "Task deleted" });
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -110,4 +130,4 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-export default router;
+export { router };
